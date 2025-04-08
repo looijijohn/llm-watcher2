@@ -145,8 +145,13 @@ func checkServer(server Server, timeout int, collection *mongo.Collection) {
 
 // startScheduler initiates the cron job to check servers every hour
 func startScheduler(config *Config, collection *mongo.Collection) {
+	for _, server := range config.Servers {
+		go checkServer(server, config.Timeout, collection)
+	}
+
+	
 	c := cron.New()
-	_, err := c.AddFunc("@every 2s", func() {
+	_, err := c.AddFunc("@every 1800s", func() {
 		for _, server := range config.Servers {
 			go checkServer(server, config.Timeout, collection)
 		}
@@ -183,39 +188,61 @@ func main() {
 
 	// Set up REST API
 	http.HandleFunc("/crashes", func(w http.ResponseWriter, r *http.Request) {
-		limitStr := r.URL.Query().Get("limit")
-		sortStr := r.URL.Query().Get("sort")
+		switch r.Method {
+		case http.MethodGet:
+			// Existing GET endpoint to retrieve crashes
+			limitStr := r.URL.Query().Get("limit")
+			sortStr := r.URL.Query().Get("sort")
 
-		limit := 10
-		sortOrder := -1 // descending (newest first)
-		if limitStr != "" {
-			if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
-				limit = parsedLimit
+			limit := 10
+			sortOrder := -1 // descending (newest first)
+			if limitStr != "" {
+				if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+					limit = parsedLimit
+				}
 			}
-		}
-		if sortStr == "asc" {
-			sortOrder = 1 // ascending (oldest first)
-		}
+			if sortStr == "asc" {
+				sortOrder = 1 // ascending (oldest first)
+			}
 
-		findOptions := options.Find()
-		findOptions.SetSort(bson.D{{"timestamp", sortOrder}})
-		findOptions.SetLimit(int64(limit))
+			findOptions := options.Find()
+			findOptions.SetSort(bson.D{{"timestamp", sortOrder}})
+			findOptions.SetLimit(int64(limit))
 
-		var events []CrashEvent
-		cursor, err := collection.Find(context.Background(), bson.M{}, findOptions)
-		if err != nil {
-			http.Error(w, "Failed to query crash events", http.StatusInternalServerError)
-			log.Printf("Database query error: %v", err)
-			return
-		}
-		if err = cursor.All(context.Background(), &events); err != nil {
-			http.Error(w, "Failed to decode crash events", http.StatusInternalServerError)
-			log.Printf("Cursor decode error: %v", err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err = json.NewEncoder(w).Encode(events); err != nil {
-			log.Printf("Failed to encode response: %v", err)
+			var events []CrashEvent
+			cursor, err := collection.Find(context.Background(), bson.M{}, findOptions)
+			if err != nil {
+				http.Error(w, "Failed to query crash events", http.StatusInternalServerError)
+				log.Printf("Database query error: %v", err)
+				return
+			}
+			if err = cursor.All(context.Background(), &events); err != nil {
+				http.Error(w, "Failed to decode crash events", http.StatusInternalServerError)
+				log.Printf("Cursor decode error: %v", err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			if err = json.NewEncoder(w).Encode(events); err != nil {
+				log.Printf("Failed to encode response: %v", err)
+			}
+
+		case http.MethodDelete:
+			// New DELETE endpoint to remove all crashes
+			result, err := collection.DeleteMany(context.Background(), bson.M{})
+			if err != nil {
+				http.Error(w, "Failed to delete crash events", http.StatusInternalServerError)
+				log.Printf("Delete error: %v", err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"message":      "All crash events deleted",
+				"deletedCount": result.DeletedCount,
+			})
+			log.Printf("Deleted %d crash events", result.DeletedCount)
+
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
 
