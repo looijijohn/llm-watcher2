@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"time"
 
@@ -21,8 +22,9 @@ import (
 
 // Server represents an Ollama server configuration
 type Server struct {
-	URL   string `yaml:"url"`
-	Model string `yaml:"model"`
+	URL           string `yaml:"url"`
+	Model         string `yaml:"model"`
+	ContainerName string `yaml:"container_name"`
 }
 
 // Config holds the application configuration
@@ -132,6 +134,17 @@ func checkServer(server Server, timeout int, collection *mongo.Collection) {
 			log.Printf("Failed to insert crash event for %s: %v", server.URL, insertErr)
 		} else {
 			log.Printf("Logged crash event for %s (model: %s, type: %s)", server.URL, server.Model, crashType)
+			// Restart the Docker container
+			if server.ContainerName != "" {
+				cmd := exec.Command("docker", "restart", server.ContainerName)
+				if err := cmd.Run(); err != nil {
+					log.Printf("Failed to restart container %s for server %s: %v", server.ContainerName, server.URL, err)
+				} else {
+					log.Printf("Successfully restarted container %s for server %s", server.ContainerName, server.URL)
+				}
+			} else {
+				log.Printf("No container_name specified for server %s, skipping restart", server.URL)
+			}
 		}
 		log.Printf("Error checking server %s (type: %s): %v", server.URL, crashType, err)
 		return
