@@ -48,6 +48,7 @@ type RestartEvent struct {
 	URL           string    `bson:"url"`
 	Model         string    `bson:"model"`
 	Status        string    `bson:"status"` // "success" or "fail"
+	ErrorMessage  string    `bson:"error_message,omitempty"` // Error message if status is "fail"
 }
 
 // loadConfig reads and parses the YAML configuration file
@@ -158,6 +159,7 @@ func checkServer(server Server, timeout int, crashCollection, restartCollection 
 			if err := cmd.Run(); err != nil {
 				log.Printf("Failed to restart container %s for server %s: %v", server.ContainerName, server.URL, err)
 				restartEvent.Status = "fail"
+				restartEvent.ErrorMessage = err.Error()
 			} else {
 				log.Printf("Successfully restarted container %s for server %s", server.ContainerName, server.URL)
 				restartEvent.Status = "success"
