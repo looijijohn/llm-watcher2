@@ -1,6 +1,8 @@
 servers:
   - url: "http://host.docker.internal:11434/api/chat"
     model: "llama3.2"
+    container_name: "ollama5"
   - url: "http://localhost:11435/api/chat"
     model: "anothermodel"
+    container_name: "ollama5"
 timeout: 10
