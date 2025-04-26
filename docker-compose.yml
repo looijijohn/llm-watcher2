@@ -5,7 +5,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./config.yaml:/usr/share/llm-watcher/config.yaml:ro
+      - /usr/share/config.yaml:/usr/share/llm-watcher/config.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - mongo
     environment:
@@ -13,7 +14,7 @@ services:
   mongo:
     image: mongo:6.0
     ports:
-      - "27018:27017"
+      - "27017:27017"
     volumes:
       - mongo-data:/data/db
 volumes:
